@@ -33,6 +33,10 @@ end
 _G.AutoLeviathanFull_Loaded = true
 if _G.LeviathanKillTimeoutMin == nil then _G.LeviathanKillTimeoutMin = 15 end
 if _G.LeviathanTimeoutReset == nil then _G.LeviathanTimeoutReset = true end
+if _G.CaptainBoardTimeoutEnabled == nil then _G.CaptainBoardTimeoutEnabled = true end
+if _G.CaptainBoardTimeoutSec == nil then _G.CaptainBoardTimeoutSec = 180 end -- 3分钟
+if _G.WebhookSendCaptainBoardTimeout == nil then _G.WebhookSendCaptainBoardTimeout = true end
+
 
 repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPlayer
 local Players = game:GetService("Players")
@@ -300,18 +304,6 @@ T, ModeDisplay = (function()
         ["wh.msg.heartspawn"] = { en = "[Auto Leviathan] Heart spawned!", es = "[Auto Leviathan] El corazón apareció", zh = "[Auto Leviathan] 心脏出现!", th = "[Auto Leviathan] หัวใจเกิดแล้ว!" },
         ["wh.msg.leviathan"] = { en = "[Auto Leviathan] Leviathan spawned!", es = "[Auto Leviathan] El Leviathan apareció", zh = "[Auto Leviathan] 利维坦出现!", th = "[Auto Leviathan] ลีวายาธานเกิดแล้ว!" },
         ["wh.msg.scrollgain"] = { en = "[Auto Leviathan] Scroll obtained!", es = "[Auto Leviathan] ¡Pergamino obtenido!", zh = "[Auto Leviathan] 获得卷轴!", th = "[Auto Leviathan] ได้รับม้วน!" },
-        ["webhook.send.leviathan.timeout"] = {
-            en = "Leviathan Kill Timeout",
-            es = "Timeout de muerte del Leviathan",
-            zh = "利维坦击杀超时",
-            th = "หมดเวลาฆ่าลีวายาธาน",
-        },
-        ["webhook.send.leviathan.timeout.desc"] = {
-            en = "Webhook when kill-timeout forces local respawn",
-            es = "Webhook cuando el timeout fuerza el respawn local",
-            zh = "击杀超时触发强制重生时发送 Webhook",
-            th = "ส่ง Webhook เมื่อหมดเวลาแล้วบังคับเกิดใหม่",
-        },
         ["wh.none"] = { en = "None", es = "Ninguno", zh = "无", th = "ไม่มี" },
         ["wh.scroll"] = { en = "Scrolls", es = "Pergaminos", zh = "卷轴", th = "ม้วน" },
         ["wh.sendfailed"] = { en = "Send Failed", es = "Error al enviar", zh = "发送失败", th = "ส่งไม่สำเร็จ" },
@@ -320,13 +312,6 @@ T, ModeDisplay = (function()
         ["wh.title.heartgot"] = { en = "Heart Grabbed", es = "Corazón enganchado", zh = "已勾到心脏", th = "เกี่ยวหัวใจได้" },
         ["wh.title.heartspawn"] = { en = "Heart Spawned", es = "Corazón aparecido", zh = "心脏出现", th = "หัวใจเกิด" },
         ["wh.title.leviathan"] = { en = "Leviathan Spawned", es = "Leviathan apareció", zh = "利维坦出现", th = "ลีวายาธานเกิด" },
-        ["wh.title.leviathan.timeout"] = { en = "Leviathan Timeout Reset", es = "Timeout del Leviathan", zh = "利维坦超时重生", th = "ลีวายาธานหมดเวลา" },
-        ["wh.msg.leviathan.timeout"] = {
-            en = "[Auto Leviathan] Kill timeout — Leviathan still alive after {min} min. Forcing local respawn.",
-            es = "[Auto Leviathan] Tiempo agotado — el Leviathan sigue vivo tras {min} min. Forzando respawn local.",
-            zh = "[Auto Leviathan] 击杀超时 — 利维坦存活超过 {min} 分钟，强制本地重生。",
-            th = "[Auto Leviathan] หมดเวลาฆ่า — ลีวายาธานยังอยู่เกิน {min} นาที บังคับเกิดใหม่",
-        },
         ["wh.title.lowplayers"] = { en = "Low Players", es = "Pocos jugadores", zh = "人数不足", th = "ผู้เล่นน้อย" },
         ["wh.title.manual"] = { en = "Manual Send", es = "Envio manual", zh = "手动发送", th = "ส่งด้วยตนเอง" },
         ["wh.title.progress"] = { en = "Sail Progress", es = "Progreso de navegación", zh = "航海进度", th = "ความคืบหน้าการเดินเรือ" },
@@ -414,7 +399,6 @@ if _G.WebhookSendHeartGain == nil then _G.WebhookSendHeartGain = false end
 if _G.WebhookSendScrollGain == nil then _G.WebhookSendScrollGain = false end
 if _G.WebhookSendEnchantResult == nil then _G.WebhookSendEnchantResult = true end
 if _G.WebhookSendLowPlayers == nil then _G.WebhookSendLowPlayers = false end
-if _G.WebhookSendLeviathanTimeout == nil then _G.WebhookSendLeviathanTimeout = true end
 local Character = LocalPlayer.Character
 local HD = Character and Character:FindFirstChild("Humanoid")
 local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
@@ -762,7 +746,6 @@ local ConfigKeys = {
     "WebhookSendHeartGain",
     "WebhookSendScrollGain",
     "WebhookSendEnchantResult",
-    "WebhookSendLeviathanTimeout",
     "ShowInfoUI",
 }
 function EnsureConfigFolder()
@@ -3624,31 +3607,6 @@ do
                 SendNotify("Leviathan", "Timeout — forcing respawn")
             end
         end)
-        -- webhook：超时重生提示
-        pcall(function()
-            if _G.WebhookSendLeviathanTimeout == false then return end
-            if not _G.WebhookURL or _G.WebhookURL == "" then return end
-            local mins = tonumber(_G.LeviathanKillTimeoutMin) or 15
-            local msg = nil
-            local title = "Leviathan Timeout Reset"
-            if type(T) == "function" then
-                msg = tostring(T("wh.msg.leviathan.timeout") or ""):gsub("{min}", tostring(mins))
-                title = tostring(T("wh.title.leviathan.timeout") or title)
-            end
-            if not msg or msg == "" or msg:find("wh%.msg", 1, true) then
-                msg = string.format(
-                    "[Auto Leviathan] Kill timeout — Leviathan still alive after %s min. Forcing local respawn.\nReason: %s",
-                    tostring(mins), tostring(reason or "")
-                )
-            else
-                msg = msg .. "\nReason: " .. tostring(reason or "")
-            end
-            if type(_G.RJR_SendWebhookUI) == "function" then
-                _G.RJR_SendWebhookUI(msg, title, false, 15158332) -- red-ish
-            elseif type(SendWebhookUI) == "function" then
-                SendWebhookUI(msg, title, false, 15158332)
-            end
-        end)
         task.spawn(function()
             for try = 1, 6 do
                 local char = LocalPlayer.Character
@@ -5467,6 +5425,105 @@ local function StartCaptain()
             task.wait(1)
         end
         CaptainRunning = false
+    end)
+end
+-- ===== Captain off-boat timeout → reset + rebuy + webhook =====
+do
+    local OffBoatSince = 0
+    local LastFireAt = 0
+    local function CaptainOnOwnBoat()
+        if not IsOnBoat or not IsOnBoat() then
+            return false
+        end
+        local ok, boat = pcall(function()
+            return GetOwnBoat and GetOwnBoat()
+        end)
+        if not ok or not boat then
+            return true
+        end
+        local _, _, hum = GetCharacterParts()
+        if hum and hum.SeatPart and hum.SeatPart:IsDescendantOf(boat) then
+            return true
+        end
+        return IsOnBoat()
+    end
+    local function FireCaptainBoardTimeout()
+        local sec = tonumber(_G.CaptainBoardTimeoutSec) or 180
+        local msg = string.format(
+            "[Auto Leviathan] Captain not on boat for %ds → reset + rebuy\nPlayer: %s\nJobId: %s\nPlayers: %d",
+            sec,
+            tostring(LocalPlayer and LocalPlayer.Name),
+            tostring(game.JobId),
+            #Players:GetPlayers()
+        )
+        print(msg)
+        pcall(function()
+            if SetStatus then SetStatus("船长超时未上船 → 重置并重买船") end
+        end)
+        if _G.WebhookSendCaptainBoardTimeout ~= false then
+            pcall(function()
+                if SendWebhookUI then
+                    SendWebhookUI(msg, "Captain Board Timeout")
+                elseif SendWebhook then
+                    SendWebhook(msg, "Captain Board Timeout")
+                end
+            end)
+        end
+        task.spawn(function()
+            pcall(function()
+                if _G.RJR_ResetCharacterAtTiki then
+                    _G.RJR_ResetCharacterAtTiki("Captain board timeout", true)
+                end
+            end)
+            local waitStart = os.clock()
+            while os.clock() - waitStart < 25 do
+                if _G.RJR_Resetting then
+                    task.wait(0.5)
+                else
+                    break
+                end
+            end
+            task.wait(1.5)
+            pcall(function()
+                if RebuyBoatAndBoard then
+                    RebuyBoatAndBoard()
+                elseif BuyOwnBoat then
+                    BuyOwnBoat("Captain board timeout: rebuy boat")
+                end
+            end)
+        end)
+    end
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            if not _G.CaptainBoardTimeoutEnabled then
+                OffBoatSince = 0
+            elseif not _G.AutoLeviathanFull or _G.Mode ~= "Capitán" then
+                OffBoatSince = 0
+            elseif _G.RJR_Resetting then
+                OffBoatSince = 0
+            else
+                local onBoat = false
+                pcall(function() onBoat = CaptainOnOwnBoat() end)
+                if onBoat then
+                    OffBoatSince = 0
+                else
+                    if OffBoatSince <= 0 then
+                        OffBoatSince = os.clock()
+                    else
+                        local limit = tonumber(_G.CaptainBoardTimeoutSec) or 180
+                        if limit < 15 then limit = 15 end
+                        if os.clock() - OffBoatSince >= limit then
+                            if os.clock() - LastFireAt > 45 then
+                                LastFireAt = os.clock()
+                                OffBoatSince = 0
+                                FireCaptainBoardTimeout()
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end)
 end
 local FollowerRunning = false
@@ -7968,6 +8025,25 @@ MainSection:AddSlider("leviathan.timeout.min", {
         _G.LeviathanKillTimeoutMin = tonumber(Value) or 15
     end,
 })
+MainSection:AddToggle("captain.board.timeout", {
+    Title = "Captain Board Timeout Reset",
+    Description = "If captain is not on a boat within the timer, force reset + rebuy boat and send webhook.",
+    Default = _G.CaptainBoardTimeoutEnabled ~= false,
+    Callback = function(State)
+        _G.CaptainBoardTimeoutEnabled = State
+    end,
+})
+MainSection:AddSlider("captain.board.timeout.sec", {
+    Title = "Board Timeout (seconds)",
+    Description = "How long captain can stay off-boat before reset+rebuy (default 180 = 3 min).",
+    Default = tonumber(_G.CaptainBoardTimeoutSec) or 180,
+    Min = 30,
+    Max = 600,
+    Rounding = 0,
+    Callback = function(Value)
+        _G.CaptainBoardTimeoutSec = tonumber(Value) or 180
+    end,
+})
 MainSection:AddToggle("solo.seafarm", {
     Title = T("solo.seafarm"),
     Description = T("solo.seafarm.desc"),
@@ -8921,7 +8997,6 @@ do
             WebhookStatusPara:SetDesc(T("wh.sendfailed") .. (err and (" (" .. tostring(err) .. ")") or ""))
         end
     end
-    _G.RJR_SendWebhookUI = SendWebhookUI
     local function GetMaterialCounts()
         local Etc = GetCraftData()
         local ScaleT, HeartT, ScrollT = "0", "0", ""
@@ -9063,13 +9138,12 @@ do
             SaveConfig()
         end,
     })
-    Tabs.Webhook:AddToggle("webhook.send.leviathan.timeout", {
-        Title = T("webhook.send.leviathan.timeout"),
-        Description = T("webhook.send.leviathan.timeout.desc"),
-        Default = _G.WebhookSendLeviathanTimeout ~= false,
-        Callback = function(State)
-            _G.WebhookSendLeviathanTimeout = State
-            SaveConfig()
+    Tabs.Webhook:AddToggle("webhook.send.captain.board.timeout", {
+        Title = "Captain Board Timeout",
+        Description = "Notify when captain off-boat timeout triggers reset+rebuy",
+        Default = _G.WebhookSendCaptainBoardTimeout ~= false,
+        Callback = function(Value)
+            _G.WebhookSendCaptainBoardTimeout = Value
         end,
     })
     Tabs.Webhook:AddToggle("webhook.send.heartspawn", {
